@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clothing Shop Invoice</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { font-family: Arial, sans-serif; color: #202938; background: #f3f5f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 18px; }
+    .wrap { max-width: 1000px; margin: 0 auto; }
+    .card { background: white; border: 1px solid #e5e9f0; border-radius: 14px; padding: 20px; margin: 0 0 16px; box-shadow: 0 5px 20px #1b2b4a0a; }
+    h1 { margin: 0 0 8px; font-size: 26px; }
+    h2 { margin: 0 0 15px; font-size: 19px; }
+    p { line-height: 1.45; }
+    .muted { color: #667085; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+    label { display: block; font-size: 13px; font-weight: 700; margin: 0 0 6px; }
+    input { width: 100%; border: 1px solid #cfd6e2; border-radius: 8px; padding: 11px; font: inherit; background: white; }
+    input:focus { outline: 2px solid #c7d8ff; border-color: #3768d4; }
+    .field { min-width: 0; }
+    .item-row, .item-head { display: grid; grid-template-columns: minmax(0, 2fr) minmax(75px, .7fr) minmax(100px, 1fr) 42px; gap: 9px; align-items: end; }
+    .item-head { color: #667085; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+    .item-row { margin-bottom: 10px; }
+    button, .button-link { border: 0; border-radius: 8px; padding: 11px 14px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; justify-content: center; align-items: center; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .primary { color: white; background: #2859c5; }
+    .secondary { color: #253149; background: #e9edf4; }
+    .green { color: white; background: #168849; }
+    .danger { color: #b42318; background: #fff0ef; padding: 10px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .total { display: flex; justify-content: flex-end; gap: 28px; border-top: 1px solid #e7ebf1; padding-top: 13px; margin-top: 8px; font-size: 21px; font-weight: 700; }
+    #status { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 14px; font-size: 14px; }
+    .history-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid #edf0f4; }
+    .hidden { display: none !important; }
+    .pill { display: inline-block; background: #edf7f0; color: #216e3a; border-radius: 999px; padding: 5px 9px; font-size: 12px; }
+    .warning { background: #fff8e6; border: 1px solid #f2dfad; padding: 12px; border-radius: 9px; font-size: 13px; }
+    @media (max-width: 640px) {
+      body { padding: 9px; } .card { padding: 14px; }
+      .grid { grid-template-columns: 1fr; }
+      .item-head { display: none; }
+      .item-row { grid-template-columns: 1fr 1fr; border: 1px solid #e4e8ef; padding: 10px; border-radius: 9px; }
+      .item-row .item-name { grid-column: 1 / -1; }
+      .actions button, .actions a { flex: 1 1 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="card">
+    <h1>Clothing Shop Invoice</h1>
+    <p class="muted">Create a PDF in your browser, upload it to private Supabase Storage, and share a time-limited download link through WhatsApp.</p>
+    <div class="warning">For shop-owner use only: sign in with your shop account before creating invoices. Never put a Supabase service-role key in this website.</div>
+  </section>
+
+  <section class="card">
+    <h2>Supabase setup</h2>
+    <p class="muted">Paste your Supabase Project URL and anon/public key below. These are browser-side settings; access is controlled by Supabase Auth and Storage policies. Do not paste a service-role or secret key.</p>
+    <div class="grid">
+      <div class="field"><label for="projectUrl">Supabase Project URL</label><input id="projectUrl" value="https://ewplkxytrurdipwfwywh.supabase.co" placeholder="https://your-project.supabase.co" autocomplete="url"></div>
+      <div class="field"><label for="anonKey">Supabase anon/public key</label><input id="anonKey" value="sb_publishable_5NBGaVAjZq5QVmQF3eU8oQ_0_eP8iy6" placeholder="sb_publishable_... or legacy anon key" autocomplete="off"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="connectBtn" type="button">Connect</button>
+      <button class="secondary" id="forgetConfigBtn" type="button">Forget saved config</button>
+    </div>
+    <p id="connectionStatus" class="muted" role="status"></p>
+  </section>
+
+  <section class="card">
+    <h2>Shop account</h2>
+    <div id="authOut">
+      <div class="grid">
+        <div class="field"><label for="email">Shop email</label><input id="email" type="email" autocomplete="username" placeholder="you@example.com"></div>
+        <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters"></div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="signInBtn" type="button">Sign in</button>
+        <button class="secondary" id="signUpBtn" type="button">Create shop account</button>
+      </div>
+      <p class="muted">Create your account once. If email confirmation is enabled in Supabase, confirm the email before signing in.</p>
+    </div>
+    <div id="authIn" class="hidden">
+      <p>Signed in as <strong id="signedInEmail"></strong> <span class="pill">Authenticated</span></p>
+      <button class="secondary" id="signOutBtn" type="button">Sign out</button>
+    </div>
+    <p id="authStatus" role="status" aria-live="polite"></p>
+  </section>
+
+  <div id="invoiceApp" class="hidden">
+    <section class="card">
+      <h2>Shop details</h2>
+      <div class="grid">
+        <div class="field"><label for="shopName">Shop name</label><input id="shopName" value="My Clothing Shop"></div>
+        <div class="field"><label for="shopPhone">Shop phone (optional)</label><input id="shopPhone" placeholder="Shop contact number"></div>
+        <div class="field"><label for="shopAddress">Shop address (optional)</label><input id="shopAddress" placeholder="Shop address"></div>
+        <div class="field"><label for="invoiceDate">Invoice date</label><input id="invoiceDate" type="date"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Customer details</h2>
+      <div class="grid">
+        <div class="field"><label for="customerName">Customer name *</label><input id="customerName" placeholder="Enter customer name"></div>
+        <div class="field"><label for="whatsapp">WhatsApp number *</label><input id="whatsapp" type="tel" inputmode="tel" placeholder="India: 919876543210"><p class="muted">Include country code, digits only recommended.</p></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Items</h2>
+      <div class="item-head"><span>Item / clothing name</span><span>Qty</span><span>Price (Rs.)</span><span></span></div>
+      <div id="items"></div>
+      <button class="secondary" id="addItem" type="button">+ Add item</button>
+      <div class="total"><span>Total</span><span id="total">Rs. 0.00</span></div>
+      <div class="actions">
+        <button class="primary" id="generateBtn" type="button">Generate PDF & upload</button>
+        <button class="green" id="shareBtn" type="button" disabled>Share link on WhatsApp</button>
+      </div>
+      <p class="muted">PDFs are generated in your browser and uploaded to the private <code>invoices</code> bucket. Download links expire after 7 days. Generate a fresh link from invoice history when needed.</p>
+      <div id="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <div class="actions" style="justify-content:space-between;margin-top:0">
+        <h2 style="margin:0">Saved invoices</h2>
+        <button class="secondary" id="refreshHistoryBtn" type="button">Refresh</button>
+      </div>
+      <div id="history"><p class="muted">Loading invoices…</p></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const BUCKET = 'invoices';
+  const SIGNED_URL_SECONDS = 7 * 24 * 60 * 60;
+  let supabase = null;
+  let currentUser = null;
+  let lastInvoice = null;
+
+  const $ = id => document.getElementById(id);
+  const setText = (id, text) => { $(id).textContent = text; };
+  const show = (id, visible) => $(id).classList.toggle('hidden', !visible);
+  $('invoiceDate').value = new Date().toISOString().slice(0, 10);
+
+  function formatMoney(n) {
+    return 'Rs. ' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function phoneDigits(value) { return value.replace(/\D/g, ''); }
+  function addItem(name = '', qty = 1, price = '') {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    const nameWrap = document.createElement('div'); nameWrap.className = 'item-name';
+    const nameLabel = document.createElement('label'); nameLabel.textContent = 'Item / clothing name';
+    const nameInput = document.createElement('input'); nameInput.className = 'item-title'; nameInput.placeholder = 'e.g. Shirt'; nameInput.value = name;
+    nameWrap.append(nameLabel, nameInput);
+    const qtyWrap = document.createElement('div');
+    const qtyLabel = document.createElement('label'); qtyLabel.textContent = 'Quantity';
+    const qtyInput = document.createElement('input'); qtyInput.className = 'item-qty'; qtyInput.type = 'number'; qtyInput.min = '1'; qtyInput.step = '1'; qtyInput.value = String(qty);
+    qtyWrap.append(qtyLabel, qtyInput);
+    const priceWrap = document.createElement('div');
+    const priceLabel = document.createElement('label'); priceLabel.textContent = 'Price (Rs.)';
+    const priceInput = document.createElement('input'); priceInput.className = 'item-price'; priceInput.type = 'number'; priceInput.min = '0'; priceInput.step = '0.01'; priceInput.placeholder = '0.00'; priceInput.value = price === '' ? '' : String(price);
+    priceWrap.append(priceLabel, priceInput);
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Remove item');
+    [nameInput, qtyInput, priceInput].forEach(input => input.addEventListener('input', updateTotal));
+    remove.addEventListener('click', () => {
+      if ($('items').children.length > 1) row.remove();
+      else { nameInput.value = ''; qtyInput.value = '1'; priceInput.value = ''; }
+      updateTotal();
+    });
+    row.append(nameWrap, qtyWrap, priceWrap, remove);
+    $('items').appendChild(row);
+    updateTotal();
+  }
+  function readItems() {
+    return [...$('items').querySelectorAll('.item-row')].map(row => ({
+      name: row.querySelector('.item-title').value.trim(),
+      quantity: Number(row.querySelector('.item-qty').value),
+      price: Number(row.querySelector('.item-price').value)
+    }));
+  }
+  function updateTotal() {
+    const total = readItems().reduce((sum, i) => sum + ((Number.isFinite(i.quantity) && Number.isFinite(i.price)) ? i.quantity * i.price : 0), 0);
+    setText('total', formatMoney(total));
+  }
+  function getInvoiceData() {
+    const customerName = $('customerName').value.trim();
+    const whatsapp = phoneDigits($('whatsapp').value);
+    const items = readItems();
+    if (!customerName) throw new Error('Enter the customer name.');
+    if (whatsapp.length < 8 || whatsapp.length > 15) throw new Error('Enter a valid WhatsApp number including country code, e.g. 919876543210.');
+    if (!items.length || items.some(i => !i.name || !Number.isInteger(i.quantity) || i.quantity < 1 || !Number.isFinite(i.price) || i.price < 0)) {
+      throw new Error('Every item needs a name, quantity of at least 1, and a valid price.');
+    }
+    const total = items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+    return {
+      shopName: $('shopName').value.trim() || 'Clothing Shop',
+      shopPhone: $('shopPhone').value.trim(),
+      shopAddress: $('shopAddress').value.trim(),
+      invoiceDate: $('invoiceDate').value || new Date().toISOString().slice(0, 10),
+      customerName, whatsapp, items, total
+    };
+  }
+  function createPdf(data, invoiceNo) {
+    if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('PDF library could not load. Check your internet connection and reload.');
+    const doc = new window.jspdf.jsPDF();
+    const left = 16; let y = 18;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.text(data.shopName, left, y); y += 8;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    if (data.shopAddress) { doc.text(doc.splitTextToSize(data.shopAddress, 175), left, y); y += 6; }
+    if (data.shopPhone) { doc.text('Phone: ' + data.shopPhone, left, y); y += 6; }
+    y += 5; doc.setDrawColor(205); doc.line(left, y, 194, y); y += 10;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('INVOICE', left, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('Invoice No: ' + invoiceNo, 194, y, { align: 'right' });
+    y += 7; doc.text('Date: ' + data.invoiceDate, left, y); y += 8;
+    doc.setFont('helvetica', 'bold'); doc.text('Bill To', left, y); y += 6;
+    doc.setFont('helvetica', 'normal'); doc.text(doc.splitTextToSize('Customer: ' + data.customerName, 175), left, y); y += 6;
+    doc.text('WhatsApp: +' + data.whatsapp, left, y); y += 10;
+    doc.setFillColor(238, 242, 248); doc.rect(left, y - 5, 178, 9, 'F');
+    doc.setFont('helvetica', 'bold'); doc.text('Item', left + 2, y); doc.text('Qty', 116, y);
+    doc.text('Price', 143, y); doc.text('Amount', 191, y, { align: 'right' });
+    y += 9; doc.setFont('helvetica', 'normal');
+    data.items.forEach(item => {
+      const lines = doc.splitTextToSize(item.name, 88);
+      if (y + Math.max(7, lines.length * 5) > 275) { doc.addPage(); y = 20; }
+      doc.text(lines, left + 2, y); doc.text(String(item.quantity), 116, y);
+      doc.text(item.price.toFixed(2), 143, y); doc.text((item.quantity * item.price).toFixed(2), 191, y, { align: 'right' });
+      y += Math.max(7, lines.length * 5);
+    });
+    y += 2; doc.setDrawColor(190); doc.line(left, y, 194, y); y += 10;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('TOTAL: ' + formatMoney(data.total), 191, y, { align: 'right' });
+    y += 15; doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('Thank you for shopping with us!', left, y);
+    return doc.output('blob');
+  }
+  function configuredClient() {
+    if (!supabase || !currentUser) throw new Error('Connect Supabase and sign in with your shop account first.');
+    return supabase;
+  }
+  async function connect() {
+    const url = $('projectUrl').value.trim();
+    const key = $('anonKey').value.trim();
+    if (!/^https:\/\/[a-zA-Z0-9.-]+$/.test(url) || !key) throw new Error('Enter a valid Supabase Project URL and anon/public key.');
+    if (!window.supabase || !window.supabase.createClient) throw new Error('Supabase library did not load. Connect to the internet and open this file in Chrome/Edge, not a file preview. If it still fails, use the GitHub Pages URL.');
+    supabase = window.supabase.createClient(url, key);
+    localStorage.setItem('clothing_invoice_supabase_url', url);
+    localStorage.setItem('clothing_invoice_supabase_anon_key', key);
+    setText('connectionStatus', 'Connected to Supabase project. Sign in or create your shop account.');
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    await updateSession(data.session);
+  }
+  async function updateSession(session) {
+    currentUser = session ? session.user : null;
+    show('authOut', !currentUser);
+    show('authIn', !!currentUser);
+    show('invoiceApp', !!currentUser);
+    if (currentUser) {
+      setText('signedInEmail', currentUser.email || currentUser.id);
+      setText('authStatus', 'Signed in. Your invoices are stored under your account.');
+      await loadHistory();
+    } else {
+      setText('authStatus', '');
+      setText('history', ''); lastInvoice = null; $('shareBtn').disabled = true;
+    }
+  }
+  async function loadHistory() {
+    if (!supabase || !currentUser) return;
+    const history = $('history'); history.replaceChildren();
+    const loading = document.createElement('p'); loading.className = 'muted'; loading.textContent = 'Loading invoices…'; history.appendChild(loading);
+    const { data, error } = await supabase.storage.from(BUCKET).list(currentUser.id, { limit: 100, sortBy: { column: 'name', order: 'desc' } });
+    history.replaceChildren();
+    if (error) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Could not load invoices: ' + error.message; history.appendChild(p); return; }
+    const files = (data || []).filter(f => f.name && f.name.toLowerCase().endsWith('.pdf'));
+    if (!files.length) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'No saved invoices yet.'; history.appendChild(p); return; }
+    for (const file of files) {
+      const row = document.createElement('div'); row.className = 'history-row';
+      const name = document.createElement('span'); name.textContent = file.name;
+      const actions = document.createElement('div'); actions.className = 'actions'; actions.style.marginTop = '0';
+      const linkBtn = document.createElement('button'); linkBtn.type = 'button'; linkBtn.className = 'secondary'; linkBtn.textContent = 'Create fresh link';
+      linkBtn.addEventListener('click', async () => {
+        linkBtn.disabled = true;
+        try {
+          const { data: signed, error: signError } = await supabase.storage.from(BUCKET).createSignedUrl(`${currentUser.id}/${file.name}`, SIGNED_URL_SECONDS);
+          if (signError) throw signError;
+          const url = signed.signedUrl.startsWith('http') ? signed.signedUrl : new URL(signed.signedUrl, $('projectUrl').value.trim()).href;
+          const message = `Hello, here is your clothing shop invoice PDF: ${url}\nInvoice: ${file.name}\nThis download link expires in 7 days.`;
+          const share = document.createElement('button'); share.type = 'button'; share.className = 'green'; share.textContent = 'WhatsApp share';
+          share.addEventListener('click', () => window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener'));
+          const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = 'Copy link';
+          copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(url); copy.textContent = 'Copied'; } catch { window.prompt('Copy this download link:', url); } });
+          actions.replaceChildren(share, copy);
+        } catch (e) { alert('Could not create link: ' + e.message); }
+        finally { linkBtn.disabled = false; }
+      });
+      actions.appendChild(linkBtn); row.append(name, actions); history.appendChild(row);
+    }
+  }
+
+  $('connectBtn').addEventListener('click', async () => {
+    const btn = $('connectBtn');
+    btn.disabled = true;
+    try { setText('connectionStatus', 'Connecting…'); await connect(); }
+    catch (e) { setText('connectionStatus', 'Connection error: ' + (e && e.message ? e.message : String(e))); }
+    finally { btn.disabled = false; }
+  });
+  $('forgetConfigBtn').addEventListener('click', async () => {
+    if (supabase) { try { await supabase.auth.signOut(); } catch {} }
+    localStorage.removeItem('clothing_invoice_supabase_url');
+    localStorage.removeItem('clothing_invoice_supabase_anon_key');
+    supabase = null; currentUser = null; show('authOut', true); show('authIn', false); show('invoiceApp', false);
+    $('projectUrl').value = ''; $('anonKey').value = '';
+    setText('connectionStatus', 'Saved configuration forgotten on this device.');
+  });
+  $('signInBtn').addEventListener('click', async () => {
+    try {
+      if (!supabase) throw new Error('Click Connect first.');
+      const { data, error } = await supabase.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+      if (error) throw error; await updateSession(data.session);
+    } catch (e) { setText('authStatus', e.message); }
+  });
+  $('signUpBtn').addEventListener('click', async () => {
+    try {
+      if (!supabase) throw new Error('Click Connect first.');
+      if ($('password').value.length < 8) throw new Error('Use a password with at least 8 characters.');
+      const { data, error } = await supabase.auth.signUp({ email: $('email').value.trim(), password: $('password').value });
+      if (error) throw error;
+      setText('authStatus', data.session ? 'Account created and signed in.' : 'Account created. Check your email to confirm it, then sign in.');
+      if (data.session) await updateSession(data.session);
+    } catch (e) { setText('authStatus', e.message); }
+  });
+  $('signOutBtn').addEventListener('click', async () => {
+    try { const { error } = await supabase.auth.signOut(); if (error) throw error; await updateSession(null); }
+    catch (e) { setText('authStatus', e.message); }
+  });
+  $('addItem').addEventListener('click', () => addItem());
+  $('generateBtn').addEventListener('click', async () => {
+    const btn = $('generateBtn'); btn.disabled = true; $('shareBtn').disabled = true; lastInvoice = null;
+    setText('status', 'Generating PDF and uploading securely…');
+    try {
+      const client = configuredClient();
+      const data = getInvoiceData();
+      const invoiceNo = 'INV-' + new Date().toISOString().replace(/\D/g, '').slice(0, 14) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const blob = createPdf(data, invoiceNo);
+      const filename = `${invoiceNo}.pdf`;
+      const storagePath = `${currentUser.id}/${filename}`;
+      const { error: uploadError } = await client.storage.from(BUCKET).upload(storagePath, blob, {
+        contentType: 'application/pdf', upsert: false, cacheControl: '3600'
+      });
+      if (uploadError) throw uploadError;
+      const { data: signed, error: signedError } = await client.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_SECONDS);
+      if (signedError) throw signedError;
+      const downloadUrl = signed.signedUrl.startsWith('http') ? signed.signedUrl : new URL(signed.signedUrl, $('projectUrl').value.trim()).href;
+      lastInvoice = { invoiceNo, customerName: data.customerName, whatsapp: data.whatsapp, downloadUrl };
+      setText('status', `Invoice saved in private Supabase Storage.\nInvoice: ${invoiceNo}\nDownload link (expires in 7 days):\n${downloadUrl}`);
+      $('shareBtn').disabled = false;
+      await loadHistory();
+    } catch (e) {
+      setText('status', 'Could not create invoice: ' + (e.message || 'Unknown error') + '\nCheck your Supabase URL/key, sign-in, bucket name, and Storage policies.');
+    } finally { btn.disabled = false; }
+  });
+  $('shareBtn').addEventListener('click', () => {
+    if (!lastInvoice) return;
+    const message = `Hello ${lastInvoice.customerName}, your clothing shop invoice ${lastInvoice.invoiceNo} is ready. Download the PDF here: ${lastInvoice.downloadUrl}\nThis link expires in 7 days.`;
+    window.open(`https://wa.me/${lastInvoice.whatsapp}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+  });
+  $('refreshHistoryBtn').addEventListener('click', loadHistory);
+
+  addItem();
+  const savedUrl = localStorage.getItem('clothing_invoice_supabase_url');
+  const savedKey = localStorage.getItem('clothing_invoice_supabase_anon_key');
+  if (savedUrl && savedKey) {
+    $('projectUrl').value = savedUrl; $('anonKey').value = savedKey;
+    connect().catch(e => setText('connectionStatus', 'Please click Connect: ' + e.message));
+  }
+})();
+</script>
+</body>
+</html>
